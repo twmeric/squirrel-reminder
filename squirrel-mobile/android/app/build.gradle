@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace 'com.squirrel.reminder'
-    compileSdk 34
+    compileSdk 33
 
     defaultConfig {
         applicationId "com.squirrel.reminder"
@@ -39,3 +39,4 @@ dependencies {
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
 }
+

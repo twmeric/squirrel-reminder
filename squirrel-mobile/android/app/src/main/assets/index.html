@@ -229,9 +229,30 @@
                     await sendLocation(lat, lng, speed);
                 },
                 function(err) {
-                    log('GPS 錯誤: ' + err.message);
+                    let errorMsg = '';
+                    switch(err.code) {
+                        case err.PERMISSION_DENIED:
+                            errorMsg = 'GPS 權限被拒絕';
+                            break;
+                        case err.POSITION_UNAVAILABLE:
+                            errorMsg = 'GPS 信號弱 (請到空曠處或檢查定位設置)';
+                            break;
+                        case err.TIMEOUT:
+                            errorMsg = 'GPS 定位超時 (將使用上次位置)';
+                            // 嘗試獲取上次位置
+                            navigator.geolocation.getCurrentPosition(
+                                function(pos) { log('使用緩存位置'); },
+                                function() { log('無法獲取位置'); },
+                                { maximumAge: 300000 }
+                            );
+                            break;
+                        default:
+                            errorMsg = 'GPS 錯誤: ' + err.message;
+                    }
+                    log('GPS 錯誤: ' + errorMsg);
+                    document.getElementById('gpsText').textContent = errorMsg;
                 },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                { enableHighAccuracy: true, timeout: 30000, maximumAge: 60000 }
             );
         }
         

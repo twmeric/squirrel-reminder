@@ -1,0 +1,152 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: m03-trajectory
+  namespace: squirrel
+  labels:
+    app: m03-trajectory
+    version: v1.2.0
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: m03-trajectory
+  template:
+    metadata:
+      labels:
+        app: m03-trajectory
+        version: v1.2.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8083"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: squirrel-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: m03-trajectory
+        image: squirrel/m03:latest
+        imagePullPolicy: Always
+        ports:
+        - name: grpc
+          containerPort: 50053
+          protocol: TCP
+        - name: http
+          containerPort: 8083
+          protocol: TCP
+        env:
+        - name: M03_PORT
+          value: ":50053"
+        - name: TIDB_DSN
+          valueFrom:
+            secretKeyRef:
+              name: squirrel-secrets
+              key: tidb-dsn
+        - name: REDIS_HOST
+          value: "redis.squirrel.svc.cluster.local"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: LOG_LEVEL
+          value: "info"
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8083
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8083
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: data
+        configMap:
+          name: metro-stations
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: m03-trajectory
+  namespace: squirrel
+  labels:
+    app: m03-trajectory
+spec:
+  type: ClusterIP
+  ports:
+  - name: grpc
+    port: 50053
+    targetPort: 50053
+    protocol: TCP
+  - name: http
+    port: 8083
+    targetPort: 8083
+    protocol: TCP
+  selector:
+    app: m03-trajectory
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: m03-trajectory-hpa
+  namespace: squirrel
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: m03-trajectory
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15

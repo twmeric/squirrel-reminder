@@ -1,0 +1,133 @@
+syntax = "proto3";
+
+package squirrel.m03;
+
+option go_package = "github.com/squirrelawake/m03-trajectory/proto";
+
+import "google/protobuf/timestamp.proto";
+
+// 位置点
+event Location {
+  double latitude = 1;
+  double longitude = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  float accuracy = 4;
+  float speed = 5;
+  string provider = 6;  // gps, network, fused
+}
+
+// 停留点
+event Staypoint {
+  string user_id = 1;
+  double center_lat = 2;
+  double center_lng = 3;
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Timestamp end_time = 5;
+  int32 duration = 6;  // 分钟
+  int32 point_count = 7;
+  string nearest_station_id = 8;
+  int32 distance_to_station = 9;  // 米
+}
+
+// 批量处理请求
+event BatchRequest {
+  string user_id = 1;
+  repeated Location locations = 2;
+  string device_type = 3;
+}
+
+// 批量处理响应
+event BatchResponse {
+  int32 processed_count = 1;
+  int32 staypoint_count = 2;
+  int64 process_time_ms = 3;
+  repeated Staypoint staypoints = 4;
+}
+
+// 轨迹查询请求
+event TrajectoryRequest {
+  string user_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+}
+
+// 轨迹查询响应
+event TrajectoryResponse {
+  string user_id = 1;
+  repeated Location locations = 2;
+  int32 count = 3;
+}
+
+// 速度查询请求
+event SpeedRequest {
+  string user_id = 1;
+  bool include_history = 2;
+}
+
+// 速度查询响应
+event SpeedResponse {
+  string user_id = 1;
+  double speed_kmh = 2;
+  bool is_moving = 3;
+  bool is_transit = 4;
+  float confidence = 5;
+  Location last_location = 6;
+  double avg_speed_1min = 7;
+  double avg_speed_5min = 8;
+}
+
+// 最近站点请求
+event NearestStationRequest {
+  double latitude = 1;
+  double longitude = 2;
+  int32 max_distance = 3;  // 默认500米
+}
+
+// 最近站点响应
+event NearestStationResponse {
+  string station_id = 1;
+  string name = 2;
+  string line_name = 3;
+  double latitude = 4;
+  double longitude = 5;
+  int32 distance = 6;
+  bool is_transfer = 7;
+  repeated string transfer_to = 8;
+  int32 stations_to_next = 9;
+  bool is_near_line = 10;
+}
+
+// 每日统计
+event DailyStats {
+  string user_id = 1;
+  google.protobuf.Timestamp date = 2;
+  int32 total_points = 3;
+  int32 staypoint_count = 4;
+  double total_distance_km = 5;
+  int32 transit_duration_min = 6;
+  int32 unique_stations = 7;
+}
+
+// 健康检查
+event HealthRequest {}
+
+event HealthResponse {
+  string status = 1;
+  string version = 2;
+  int64 uptime_seconds = 3;
+}
+
+// 服务定义
+service TrajectoryProcessor {
+  rpc ProcessBatch(BatchRequest) returns (BatchResponse);
+  rpc GetTrajectory(TrajectoryRequest) returns (TrajectoryResponse);
+}
+
+service LocationService {
+  rpc GetSpeed(SpeedRequest) returns (SpeedResponse);
+  rpc GetNearestStation(NearestStationRequest) returns (NearestStationResponse);
+}
+
+service HealthService {
+  rpc GetHealth(HealthRequest) returns (HealthResponse);
+}

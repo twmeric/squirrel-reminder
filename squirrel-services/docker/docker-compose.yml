@@ -1,0 +1,144 @@
+version: '3.8'
+
+services:
+  # m03-trajectory 轨迹处理服务
+  m03-trajectory:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.m03
+    container_name: squirrel-m03
+    ports:
+      - "50053:50053"
+      - "8083:8083"
+    environment:
+      - M03_PORT=:50053
+      - TIDB_DSN=${TIDB_DSN}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_LEVEL=info
+    depends_on:
+      - tidb
+      - redis
+    networks:
+      - squirrel-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # m04-insight-engine 洞察引擎
+  m04-insight:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.m04
+    container_name: squirrel-m04
+    ports:
+      - "8084:8084"
+    environment:
+      - M04_PORT=8084
+      - TIDB_DSN=${TIDB_DSN}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - M03_ENDPOINT=m03-trajectory:50053
+      - LOG_LEVEL=info
+    depends_on:
+      - m03-trajectory
+      - tidb
+      - redis
+    networks:
+      - squirrel-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # TiDB (开发环境使用单机版)
+  tidb:
+    image: pingcap/tidb:v7.5.0
+    container_name: squirrel-tidb
+    ports:
+      - "4000:4000"
+      - "10080:10080"
+    volumes:
+      - tidb-data:/tidb-data
+    environment:
+      - TIDB_MEM_QUOTA_QUERY=1073741824
+    networks:
+      - squirrel-network
+    restart: unless-stopped
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: squirrel-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    networks:
+      - squirrel-network
+    restart: unless-stopped
+
+  # Prometheus 监控
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: squirrel-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    networks:
+      - squirrel-network
+    restart: unless-stopped
+
+  # Grafana 可视化
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: squirrel-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - squirrel-network
+    restart: unless-stopped
+
+  # Jaeger 链路追踪
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: squirrel-jaeger
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+    networks:
+      - squirrel-network
+    restart: unless-stopped
+
+volumes:
+  tidb-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  squirrel-network:
+    driver: bridge
+    name: squirrel-network

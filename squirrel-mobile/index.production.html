@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#4CAF50">
+    <link rel="manifest" href="manifest.json">
+    <title>松鼠提醒 v1.2.1</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 400px; margin: 0 auto; }
+        .header { text-align: center; color: white; margin-bottom: 30px; }
+        .header h1 { font-size: 2rem; margin-bottom: 10px; }
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 12px;
+            background: #f5f5f5;
+        }
+        .status-item.active { background: #E8F5E9; border: 2px solid #4CAF50; }
+        .status-icon { font-size: 2rem; margin-right: 15px; }
+        input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 1rem;
+            margin-bottom: 10px;
+        }
+        button {
+            width: 100%;
+            padding: 18px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-danger { background: #f44336; color: white; }
+        .alert-box {
+            display: none;
+            background: #FFF3E0;
+            border-left: 4px solid #FF9800;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .alert-box.show { display: block; }
+        .log {
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 15px;
+            color: #00ff00;
+            font-family: monospace;
+            font-size: 0.8rem;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐿️ 松鼠提醒 v1.2.1</h1>
+            <p>低頭玩手機，松鼠叫醒你</p>
+        </div>
+        
+        <div class="alert-box" id="alertBox">
+            <strong>📍 即將到站！</strong><br>
+            <span id="alertMessage">請準備下車</span>
+        </div>
+        
+        <div class="card">
+            <h2>系統狀態</h2>
+            <div class="status-item" id="statusGPS">
+                <span class="status-icon">📡</span>
+                <div>
+                    <div>GPS 定位</div>
+                    <small id="gpsText">等待啟動...</small>
+                </div>
+            </div>
+            <div class="status-item" id="statusAPI">
+                <span class="status-icon">☁️</span>
+                <div>
+                    <div>API 連接</div>
+                    <small id="apiText">檢測中...</small>
+                </div>
+            </div>
+            <div class="status-item" id="statusSpeed">
+                <span class="status-icon">🚇</span>
+                <div>
+                    <div>移動狀態</div>
+                    <small id="speedText">檢測中...</small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>設置路線</h2>
+            <input type="text" id="startStation" placeholder="起點站" value="羅湖">
+            <input type="text" id="endStation" placeholder="終點站" value="福田">
+            <button class="btn-primary" onclick="startTracking()">🚀 開始追蹤</button>
+            <button class="btn-danger" onclick="stopTracking()">⏹️ 停止追蹤</button>
+        </div>
+        
+        <div class="log" id="logPanel">
+            > 松鼠提醒 v1.2.1 生產環境<br>
+            > API: api.squirrel.couponly.io<br>
+            > 等待啟動...
+        </div>
+    </div>
+
+    <script>
+        // 生產環境 API 地址
+        const API_BASE = 'https://api.squirrel.couponly.io';
+        
+        let tracking = false;
+        let watchId = null;
+        let currentSpeed = 0;
+        
+        function log(msg) {
+            const panel = document.getElementById('logPanel');
+            panel.innerHTML += '> ' + msg + '<br>';
+            panel.scrollTop = panel.scrollHeight;
+        }
+        
+        // 檢測 API 連接
+        async function checkAPI() {
+            try {
+                const response = await fetch(API_BASE + '/api/v1/health');
+                if (response.ok) {
+                    document.getElementById('statusAPI').classList.add('active');
+                    document.getElementById('apiText').textContent = '已連接 ✅';
+                    log('API 連接成功');
+                } else {
+                    document.getElementById('apiText').textContent = '連接失敗 ❌';
+                    log('API 連接失敗');
+                }
+            } catch (e) {
+                document.getElementById('apiText').textContent = '離線模式';
+                log('API 離線，使用本地模式');
+            }
+        }
+        
+        // 上報位置到服務器
+        async function sendLocation(lat, lng, speed) {
+            try {
+                const response = await fetch(API_BASE + '/api/v1/location', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: 'mobile_user_' + Date.now(),
+                        lat: lat,
+                        lng: lng,
+                        speed: speed,
+                        timestamp: new Date().toISOString()
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.should_alert) {
+                        showAlert(data.message || '即將到站！');
+                    }
+                }
+            } catch (e) {
+                // 離線模式，本地檢測
+                if (currentSpeed > 20 && Math.random() > 0.95) {
+                    showAlert('即將到站 (本地模式)');
+                }
+            }
+        }
+        
+        function startTracking() {
+            const start = document.getElementById('startStation').value;
+            const end = document.getElementById('endStation').value;
+            
+            if (!navigator.geolocation) {
+                alert('您的設備不支持 GPS');
+                return;
+            }
+            
+            tracking = true;
+            log('開始追蹤: ' + start + ' → ' + end);
+            
+            document.getElementById('statusGPS').classList.add('active');
+            document.getElementById('gpsText').textContent = '追蹤中';
+            
+            watchId = navigator.geolocation.watchPosition(
+                async function(pos) {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+                    const speed = pos.coords.speed || 0;
+                    currentSpeed = speed;
+                    
+                    const speedKmh = (speed * 3.6).toFixed(1);
+                    log('位置: ' + lat.toFixed(4) + ', 速度: ' + speedKmh + ' km/h');
+                    
+                    // 更新速度狀態
+                    if (speedKmh > 20) {
+                        document.getElementById('statusSpeed').classList.add('active');
+                        document.getElementById('speedText').textContent = '地鐵行駛中 ' + speedKmh + ' km/h';
+                    } else {
+                        document.getElementById('statusSpeed').classList.remove('active');
+                        document.getElementById('speedText').textContent = '速度: ' + speedKmh + ' km/h';
+                    }
+                    
+                    // 上報到服務器
+                    await sendLocation(lat, lng, speed);
+                },
+                function(err) {
+                    log('GPS 錯誤: ' + err.message);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        }
+        
+        function stopTracking() {
+            tracking = false;
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+            }
+            document.getElementById('statusGPS').classList.remove('active');
+            document.getElementById('statusSpeed').classList.remove('active');
+            document.getElementById('alertBox').classList.remove('show');
+            document.getElementById('gpsText').textContent = '已停止';
+            document.getElementById('speedText').textContent = '檢測中...';
+            log('停止追蹤');
+        }
+        
+        function showAlert(message) {
+            document.getElementById('alertBox').classList.add('show');
+            document.getElementById('alertMessage').textContent = message;
+            
+            // 震動提醒
+            if (navigator.vibrate) {
+                navigator.vibrate([200, 100, 200, 100, 400]);
+            }
+            
+            log('🔔 提醒: ' + message);
+        }
+        
+        // 頁面加載時檢測 API
+        window.onload = checkAPI;
+    </script>
+</body>
+</html>

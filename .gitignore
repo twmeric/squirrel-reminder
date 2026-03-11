@@ -1,0 +1,48 @@
+# 敏感信息
+.env
+.env.production
+.env.local
+credentials.yaml
+secrets.yaml
+*.keystore
+*.jks
+
+# 构建输出
+build/
+dist/
+*.apk
+*.aab
+
+# 依赖
+node_modules/
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+.cache/
+
+# Android
+*.apk
+*.aab
+android/app/build/
+android/.gradle/
+android/local.properties
+
+# 其他
+__pycache__/
+*.pyc
+.pytest_cache/

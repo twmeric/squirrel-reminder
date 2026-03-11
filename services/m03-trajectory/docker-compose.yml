@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  m03:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: m03-trajectory
+    ports:
+      - "50053:50053"  # gRPC
+      - "8083:8083"    # HTTP/REST
+    environment:
+      - SERVICE_NAME=m03-trajectory
+      - GRPC_PORT=50053
+      - HTTP_PORT=8083
+      - TIDB_HOST=tidb
+      - TIDB_PORT=4000
+      - TIDB_USER=root
+      - TIDB_PASSWORD=
+      - TIDB_DATABASE=squirrel_m03
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - LOG_LEVEL=info
+    depends_on:
+      - tidb
+      - redis
+    networks:
+      - squirrel-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8083/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  tidb:
+    image: pingcap/tidb:latest
+    container_name: m03-tidb
+    ports:
+      - "4000:4000"   # TiDB SQL端口
+      - "10080:10080" # TiDB HTTP状态端口
+    volumes:
+      - tidb-data:/data
+    networks:
+      - squirrel-network
+    command: >
+      --store=mocktikv
+      --path=/data
+      --log-level=info
+
+  redis:
+    image: redis:7-alpine
+    container_name: m03-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - squirrel-network
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+volumes:
+  tidb-data:
+  redis-data:
+
+networks:
+  squirrel-network:
+    driver: bridge
+    name: squirrel-network

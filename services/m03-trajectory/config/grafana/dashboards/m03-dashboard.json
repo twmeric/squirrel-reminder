@@ -1,0 +1,57 @@
+{
+  "dashboard": {
+    "title": "m03-trajectory 性能监控",
+    "tags": ["m03", "trajectory"],
+    "timezone": "Asia/Shanghai",
+    "panels": [
+      {
+        "id": 1,
+        "title": "请求延迟 P99",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, m03_request_duration_seconds_bucket)",
+            "legendFormat": "P99"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "请求QPS",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(m03_request_total[1m])",
+            "legendFormat": "QPS"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "错误率",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(m03_error_total[5m]) / rate(m03_request_total[5m])",
+            "legendFormat": "错误率"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "缓存命中率",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "m03_cache_hit_total / (m03_cache_hit_total + m03_cache_miss_total)",
+            "legendFormat": "命中率"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      }
+    ]
+  }
+}

@@ -1,0 +1,51 @@
+service:
+  name: m03-trajectory
+  version: 1.1.1
+  environment: development
+
+server:
+  grpc_port: 50053
+  http_port: 8083
+  max_connections: 1000
+
+storage:
+  tidb:
+    host: tidb
+    port: 4000
+    user: root
+    password: ""
+    database: squirrel_m03
+    max_open_conns: 50
+    max_idle_conns: 10
+    conn_max_lifetime: 3600s
+  
+  redis:
+    host: redis
+    port: 6379
+    password: ""
+    db: 0
+    pool_size: 20
+    min_idle_conns: 5
+
+algorithm:
+  stay_point:
+    epsilon: 100        # 聚类半径（米）
+    min_duration: 900   # 最短停留时间（秒）= 15分钟
+    min_points: 5       # 最少GPS点数
+  
+  speed_smoothing:
+    window_size: 5      # 滑动窗口大小
+    kalman_q: 0.01      # 过程噪声
+    kalman_r: 1.0       # 测量噪声
+  
+  geofencing:
+    metro_radius: 150   # 地铁区域半径（米）
+
+privacy:
+  gps_retention_days: 7   # GPS数据保留天数
+  encryption_key: "${ENCRYPTION_KEY}"  # SQLCipher密钥
+
+logging:
+  level: info
+  format: json
+  output: stdout

@@ -1,0 +1,70 @@
+# alert-rules-v1.2.yml - Prometheus告警规则调优
+
+groups:
+  - name: m03-trajectory.rules
+    interval: 15s
+    rules:
+      # 延迟告警 - 分级
+      - alert: M03LatencyP99Warning
+        expr: histogram_quantile(0.99, m03_request_duration_seconds_bucket) > 0.008
+        for: 2m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "m03 P99 latency > 8ms"
+          description: "Current P99: {{ $value }}ms"
+          
+      - alert: M03LatencyP99Critical
+        expr: histogram_quantile(0.99, m03_request_duration_seconds_bucket) > 0.015
+        for: 1m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "m03 P99 latency > 15ms"
+          description: "Current P99: {{ $value }}ms, immediate action required"
+      
+      # 错误率告警
+      - alert: M03ErrorRateWarning
+        expr: rate(m03_error_total[5m]) / rate(m03_request_total[5m]) > 0.001
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "m03 error rate > 0.1%"
+          
+      - alert: M03ErrorRateCritical
+        expr: rate(m03_error_total[5m]) / rate(m03_request_total[5m]) > 0.01
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "m03 error rate > 1%"
+      
+      # 缓存命中率
+      - alert: M03CacheHitRateLow
+        expr: rate(m03_cache_hit_total[10m]) / (rate(m03_cache_hit_total[10m]) + rate(m03_cache_miss_total[10m])) < 0.7
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "m03 cache hit rate < 70%"
+      
+      # 资源告警
+      - alert: M03MemoryHigh
+        expr: m03_memory_usage_bytes / m03_memory_limit_bytes > 0.85
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "m03 memory usage > 85%"
+      
+      # 业务告警 - QPS下降
+      - alert: M03QPSDrop
+        expr: rate(m03_request_total[5m]) < avg_over_time(rate(m03_request_total[5m])[1h]) * 0.5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "m03 QPS dropped 50%"

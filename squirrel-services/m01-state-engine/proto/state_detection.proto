@@ -1,0 +1,114 @@
+syntax = "proto3";
+
+package m01;
+
+option go_package = "github.com/squirrelawake/m01-state-engine/proto";
+
+// StateDetectionService is the core service for detecting user transit state
+service StateDetectionService {
+  // DetectState analyzes user state and returns detection result
+  rpc DetectState(StateDetectionRequest) returns (StateDetectionResult);
+  
+  // GetCurrentStatus returns the current status for a user
+  rpc GetCurrentStatus(StatusRequest) returns (StatusResponse);
+  
+  // SubscribeToChanges streams state changes for real-time updates
+  rpc SubscribeToChanges(SubscribeRequest) returns (stream StateChangeEvent);
+}
+
+// HealthService provides health check endpoints
+service HealthService {
+  rpc Health(HealthRequest) returns (HealthResponse);
+  rpc Ready(ReadyRequest) returns (ReadyResponse);
+}
+
+// StateDetectionRequest contains user sensor data
+message StateDetectionRequest {
+  string user_id = 1;
+  double lat = 2;
+  double lng = 3;
+  double speed_kmh = 4;
+  bool screen_on = 5;
+  double battery_level = 6;
+  int64 timestamp = 7;
+  bool is_in_metro_area = 8;
+  repeated AccelerometerData accelerometer_data = 9;
+}
+
+message AccelerometerData {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+  int64 timestamp = 4;
+}
+
+// StateDetectionResult contains the detection outcome
+message StateDetectionResult {
+  DetectionStatus status = 1;
+  double confidence = 2;
+  bool triggered = 3;
+  int64 next_check_interval = 4; // milliseconds
+  NextCheckInfo next_check_info = 5;
+  int64 latency_ms = 6;
+}
+
+enum DetectionStatus {
+  UNKNOWN = 0;
+  STATIONARY = 1;
+  WALKING = 2;
+  IN_TRANSIT = 3;
+}
+
+message NextCheckInfo {
+  bool should_check_trajectory = 1;
+  int64 recommended_interval_ms = 2;
+  string reason = 3;
+}
+
+// Status messages
+message StatusRequest {
+  string user_id = 1;
+}
+
+message StatusResponse {
+  bool exists = 1;
+  DetectionStatus current_state = 2;
+  repeated StateTransition history = 3;
+  int64 last_update = 4;
+}
+
+message StateTransition {
+  DetectionStatus from_state = 1;
+  DetectionStatus to_state = 2;
+  int64 timestamp = 3;
+  string trigger_reason = 4;
+}
+
+// Subscription messages
+message SubscribeRequest {
+  string user_id = 1;
+}
+
+message StateChangeEvent {
+  string user_id = 1;
+  DetectionStatus old_state = 2;
+  DetectionStatus new_state = 3;
+  int64 timestamp = 4;
+  double confidence = 5;
+}
+
+// Health messages
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+  string service = 2;
+  string version = 3;
+  int64 timestamp = 4;
+}
+
+message ReadyRequest {}
+
+message ReadyResponse {
+  bool ready = 1;
+}

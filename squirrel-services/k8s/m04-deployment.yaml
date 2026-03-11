@@ -1,0 +1,146 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: m04-insight
+  namespace: squirrel
+  labels:
+    app: m04-insight
+    version: v1.2.0
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: m04-insight
+  template:
+    metadata:
+      labels:
+        app: m04-insight
+        version: v1.2.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8084"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: squirrel-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: m04-insight
+        image: squirrel/m04:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8084
+          protocol: TCP
+        env:
+        - name: M04_PORT
+          value: "8084"
+        - name: TIDB_DSN
+          valueFrom:
+            secretKeyRef:
+              name: squirrel-secrets
+              key: tidb-dsn
+        - name: REDIS_HOST
+          value: "redis.squirrel.svc.cluster.local"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: M03_ENDPOINT
+          value: "m03-trajectory.squirrel.svc.cluster.local:50053"
+        - name: LOG_LEVEL
+          value: "info"
+        - name: M04_WORKERS
+          value: "4"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8084
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8084
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: m04-insight
+  namespace: squirrel
+  labels:
+    app: m04-insight
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8084
+    targetPort: 8084
+    protocol: TCP
+  selector:
+    app: m04-insight
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: m04-insight-hpa
+  namespace: squirrel
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: m04-insight
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 75
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15

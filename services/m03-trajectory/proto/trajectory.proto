@@ -1,0 +1,131 @@
+syntax = "proto3";
+
+package trajectory;
+
+option go_package = "github.com/squirrel-awake/m03-trajectory/proto";
+
+// m03 轨迹处理服务
+service TrajectoryService {
+  // 获取当前网格（脱敏坐标）
+  rpc GetCurrentGrid(GetCurrentGridRequest) returns (GetCurrentGridResponse);
+  
+  // 获取平滑速度
+  rpc GetSpeed(GetSpeedRequest) returns (GetSpeedResponse);
+  
+  // 判断是否地铁区域
+  rpc IsInMetroArea(IsInMetroAreaRequest) returns (IsInMetroAreaResponse);
+  
+  // 获取最近停留点
+  rpc GetRecentStops(GetRecentStopsRequest) returns (GetRecentStopsResponse);
+  
+  // 获取轨迹片段
+  rpc GetTrajectory(GetTrajectoryRequest) returns (GetTrajectoryResponse);
+  
+  // 获取下一个换乘站预测（BLK-001 已补充字段）
+  rpc GetNextTransferStation(GetNextTransferStationRequest) returns (GetNextTransferStationResponse);
+  
+  // 上报GPS点（客户端调用）
+  rpc ReportGPSPoint(ReportGPSPointRequest) returns (ReportGPSPointResponse);
+}
+
+// ===== 请求/响应消息 =====
+
+message GetCurrentGridRequest {
+  string user_id = 1;
+}
+
+message GetCurrentGridResponse {
+  string grid_id = 1;  // 格式: "GRID_xxx_yyy"
+}
+
+message GetSpeedRequest {
+  string user_id = 1;
+}
+
+message GetSpeedResponse {
+  double speed_kmh = 1;  // km/h
+}
+
+message IsInMetroAreaRequest {
+  string user_id = 1;
+}
+
+message IsInMetroAreaResponse {
+  bool in_metro_area = 1;
+  string nearest_station_id = 2;  // 可选
+}
+
+message GetRecentStopsRequest {
+  string user_id = 1;
+  int32 days = 2;  // 查询天数
+}
+
+message StayPoint {
+  string id = 1;
+  double center_lat = 2;
+  double center_lng = 3;
+  int64 arrive_time = 4;  // Unix timestamp (ms)
+  int64 leave_time = 5;
+  int32 duration = 6;  // 秒
+  int32 cluster_size = 7;
+}
+
+message GetRecentStopsResponse {
+  repeated StayPoint stops = 1;
+}
+
+message GetTrajectoryRequest {
+  string user_id = 1;
+  int64 start_time = 2;  // Unix timestamp (ms)
+  int64 end_time = 3;
+}
+
+message GPSPoint {
+  int64 timestamp = 1;
+  double latitude = 2;
+  double longitude = 3;
+  float accuracy = 4;  // 米
+  float speed = 5;     // m/s
+  string source = 6;   // "gps" | "network" | "passive"
+}
+
+message GetTrajectoryResponse {
+  repeated GPSPoint points = 1;
+}
+
+// BLK-001: StationInfo 已补充 isTransfer 等字段
+message StationInfo {
+  string station_id = 1;
+  string station_name = 2;
+  string line_name = 3;
+  string line_color = 4;
+  string direction = 5;
+  string direction_code = 6;
+  int32 estimated_arrival_seconds = 7;  // 秒（BLK-001 统一单位）
+  double confidence = 8;  // 0-1
+  int32 distance_meters = 9;  // 米
+  
+  // BLK-001 新增字段
+  bool is_transfer = 10;        // 是否为换乘站
+  int32 stations_to_transfer = 11;  // 到换乘站还需几站
+  string next_station_name = 12;    // 下一站名称
+}
+
+message GetNextTransferStationRequest {
+  string user_id = 1;
+}
+
+message GetNextTransferStationResponse {
+  StationInfo station = 1;  // null 表示无法预测
+  bool has_result = 2;
+}
+
+message ReportGPSPointRequest {
+  string user_id = 1;
+  GPSPoint point = 2;
+}
+
+message ReportGPSPointResponse {
+  bool success = 1;
+  string message = 2;
+}

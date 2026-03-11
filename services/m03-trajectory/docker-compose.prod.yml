@@ -1,0 +1,134 @@
+version: '3.8'
+
+# 生产环境配置
+services:
+  m03:
+    build:
+      context: .
+      dockerfile: Dockerfile.optimized
+    container_name: m03-trajectory-prod
+    restart: always
+    ports:
+      - "50053:50053"  # gRPC
+      - "8083:8083"    # HTTP
+      - "9090:9090"    # Metrics
+    environment:
+      - SERVICE_NAME=m03-trajectory
+      - GRPC_PORT=50053
+      - HTTP_PORT=8083
+      - METRICS_PORT=9090
+      - TIDB_HOST=tidb
+      - TIDB_PORT=4000
+      - TIDB_USER=root
+      - TIDB_PASSWORD=${TIDB_PASSWORD}
+      - TIDB_DATABASE=squirrel_m03
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - LOG_LEVEL=warn
+      - GOMAXPROCS=4
+    depends_on:
+      - tidb
+      - redis
+    networks:
+      - squirrel-prod
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "/root/m03-trajectory", "-health-check"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  tidb:
+    image: pingcap/tidb:latest
+    container_name: m03-tidb-prod
+    restart: always
+    ports:
+      - "4000:4000"
+    volumes:
+      - tidb-data:/data
+      - ./config/tidb.toml:/tidb.toml:ro
+    networks:
+      - squirrel-prod
+    command: >
+      --store=mocktikv
+      --path=/data
+      --log-level=warn
+      --config=/tidb.toml
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+
+  redis:
+    image: redis:7-alpine
+    container_name: m03-redis-prod
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - squirrel-prod
+    command: redis-server /usr/local/etc/redis/redis.conf
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # Prometheus监控
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: m03-prometheus
+    restart: always
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - squirrel-prod
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+
+  # Grafana仪表盘
+  grafana:
+    image: grafana/grafana:latest
+    container_name: m03-grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - squirrel-prod
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+
+volumes:
+  tidb-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  squirrel-prod:
+    driver: bridge

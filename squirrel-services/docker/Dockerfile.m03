@@ -1,0 +1,56 @@
+# m03-trajectory Dockerfile
+# 多阶段构建，减小镜像体积
+
+# 构建阶段
+FROM golang:1.21-alpine AS builder
+
+# 安装依赖
+RUN apk add --no-cache git protobuf
+
+# 设置工作目录
+WORKDIR /build
+
+# 复制go.mod和go.sum
+COPY m03-trajectory/go.mod m03-trajectory/go.sum ./
+RUN go mod download
+
+# 复制源代码
+COPY m03-trajectory/ ./
+
+# 生成protobuf代码
+RUN go generate ./...
+
+# 构建二进制文件
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -ldflags="-w -s" \
+    -o /bin/m03-trajectory \
+    ./cmd/server/
+
+# 运行阶段
+FROM alpine:3.18
+
+# 安装ca证书
+RUN apk --no-cache add ca-certificates
+
+# 创建非root用户
+RUN addgroup -g 1000 -S squirrel && \
+    adduser -u 1000 -S squirrel -G squirrel
+
+# 复制二进制文件
+COPY --from=builder /bin/m03-trajectory /usr/local/bin/
+
+# 复制地铁站点数据
+COPY data/metro_stations.json /data/
+
+# 设置用户
+USER squirrel
+
+# 暴露端口
+EXPOSE 50053 8083
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8083/health || exit 1
+
+# 启动命令
+CMD ["m03-trajectory"]
